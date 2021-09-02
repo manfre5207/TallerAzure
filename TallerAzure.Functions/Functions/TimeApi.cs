@@ -35,17 +35,7 @@ namespace TallerAzure.Functions.Functions
             //TableQuery<TimeEntity> query = new TableQuery<TimeEntity>();
             //TableQuerySegment<TimeEntity> allTimes = await timeTable.ExecuteQuerySegmentedAsync(query, null);
 
-            //foreach (TimeEntity allTime in allTimes)
-            //{
-            //    if ((allTime.EmployeeId.Equals(time.EmployeeId)))
-            //    {
-
-            //        await todoTable.ExecuteAsync(TableOperation.Delete(completedTodo));
-            //        deleted++;
-            //    }
-            //}
-
-
+           
             if (string.IsNullOrEmpty(time?.EmployeeId.ToString()))
             {
                 return new BadRequestObjectResult(new Response
@@ -55,10 +45,11 @@ namespace TallerAzure.Functions.Functions
                 });
             }
 
+            
             TimeEntity timeEntity = new TimeEntity
             {
                 EmployeeId = time.EmployeeId,
-                Date = DateTime.UtcNow,
+                Date = time.Date,
                 Type = time.Type,
                 IsConsolidate = false,
                 PartitionKey = "TIME",

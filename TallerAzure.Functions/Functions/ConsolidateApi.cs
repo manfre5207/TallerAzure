@@ -1,16 +1,16 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using TallerAzure.Common.Responses;
 using Microsoft.WindowsAzure.Storage.Table;
-using TallerAzure.Functions.Entities;
+using Newtonsoft.Json;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using TallerAzure.Common.Models;
+using TallerAzure.Common.Responses;
+using TallerAzure.Functions.Entities;
 
 namespace TallerAzure.Functions.Functions
 {
@@ -22,7 +22,8 @@ namespace TallerAzure.Functions.Functions
         [FunctionName(nameof(ConsolidateProcess))]
         public static async Task<IActionResult> ConsolidateProcess(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "consolidate")] HttpRequest req,
-            [Table("consolidate", Connection = "AzureWebJobsStorage")] CloudTable consolidateTable, CloudTable timeTable,
+            [Table("consolidate", Connection = "AzureWebJobsStorage")] CloudTable consolidateTable,
+            [Table("time", Connection = "AzureWebJobsStorage")] CloudTable timeTable,
             ILogger log)
         {
             log.LogInformation("Recieved a new consolidate.");
@@ -31,13 +32,14 @@ namespace TallerAzure.Functions.Functions
             Consolidate consolidate = JsonConvert.DeserializeObject<Consolidate>(requestBody);
 
 
+            ConsolidateEntity consolidateEntity = new ConsolidateEntity();
 
 
             TableQuery<TimeEntity> query = new TableQuery<TimeEntity>();
             TableQuerySegment<TimeEntity> allTimes = await timeTable.ExecuteQuerySegmentedAsync(query, null);
 
 
-                        if (string.IsNullOrEmpty(consolidate?.EmployeeId.ToString()))
+            if (string.IsNullOrEmpty(consolidate?.EmployeeId.ToString()))
             {
                 return new BadRequestObjectResult(new Response
                 {
@@ -47,35 +49,63 @@ namespace TallerAzure.Functions.Functions
             }
 
 
+            double partial = 0;
+            double totalminu = 0;
+
             foreach (TimeEntity allTime in allTimes)
             {
-                if ((allTime.EmployeeId.Equals(consolidate.EmployeeId)))
+
+                if (allTime.IsConsolidate.Equals(false))
                 {
-                    DateTime Entry = allTime.Date;
-                    DateTime Exit = allTime.Date;
-                    if (allTime.Type == 0)
+                    var Entry = new DateTime();
+                    var Exit = new DateTime();
+                    if ((allTime.EmployeeId.Equals(consolidate.EmployeeId)))
                     {
-                        Entry = allTime.Date;
+                        if (allTime.Type == 0)
+                        {
+                            Entry = allTime.Date;
+                        }
+                        if (allTime.Type == 1)
+                        {
+                            Exit = allTime.Date;
+                        }
                     }
-                    if (allTime.Type == 1)
+                    else
                     {
-                        Exit = allTime.Date;
+                        return new BadRequestObjectResult(new Response
+                        {
+                            IsSuccess = false,
+                            Message = "Time not found."
+                        });
                     }
+                    var minutes = (Exit - Entry).TotalMinutes;
+                    partial += minutes;
 
-                    TimeSpan ts = (Entry - Exit);
-                    
-                    ConsolidateEntity consolidateEntity = new ConsolidateEntity
+                    TableOperation findOperation = TableOperation.Retrieve<TimeEntity>("TIME", allTime.RowKey);
+                    TableResult findResult = await timeTable.ExecuteAsync(findOperation);
+                    //Update todo
+                    TimeEntity timeEntity = (TimeEntity)findResult.Result;
+
+                    if (!string.IsNullOrEmpty(allTime.EmployeeId.ToString()))
                     {
-                        EmployeeId = consolidate.EmployeeId,
-                        Date = DateTime.UtcNow,
-                        MinutesWork = ts.TotalMinutes,
-                        PartitionKey = "CONSOLIDATE",
-                        RowKey = Guid.NewGuid().ToString(),
-                        ETag = "*"
-
-                    };
+                        timeEntity.IsConsolidate = true;
+                    }
+                    TableOperation addOperationUpdate = TableOperation.Replace(timeEntity);
+                    await timeTable.ExecuteAsync(addOperationUpdate);
                 }
             }
+
+                
+            totalminu = totalminu + partial;
+            consolidateEntity = new ConsolidateEntity
+            {
+                EmployeeId = consolidate.EmployeeId,
+                Date = DateTime.UtcNow,
+                MinutesWork = totalminu,
+                PartitionKey = "CONSOLIDATE",
+                RowKey = Guid.NewGuid().ToString(),
+                ETag = "*"
+            };
 
             TableOperation addOperation = TableOperation.Insert(consolidateEntity);
             await consolidateTable.ExecuteAsync(addOperation);
