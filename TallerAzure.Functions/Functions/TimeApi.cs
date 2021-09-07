@@ -35,7 +35,7 @@ namespace TallerAzure.Functions.Functions
             //TableQuery<TimeEntity> query = new TableQuery<TimeEntity>();
             //TableQuerySegment<TimeEntity> allTimes = await timeTable.ExecuteQuerySegmentedAsync(query, null);
 
-           
+
             if (string.IsNullOrEmpty(time?.EmployeeId.ToString()))
             {
                 return new BadRequestObjectResult(new Response
@@ -45,7 +45,7 @@ namespace TallerAzure.Functions.Functions
                 });
             }
 
-            
+
             TimeEntity timeEntity = new TimeEntity
             {
                 EmployeeId = time.EmployeeId,
@@ -100,7 +100,7 @@ namespace TallerAzure.Functions.Functions
 
             //Update todo
             TimeEntity timeEntity = (TimeEntity)findResult.Result;
-            
+
             if (!string.IsNullOrEmpty(time.EmployeeId.ToString()))
             {
                 timeEntity.Date = time.Date;
@@ -126,24 +126,25 @@ namespace TallerAzure.Functions.Functions
         [FunctionName(nameof(GetAllTime))]
         public static async Task<IActionResult> GetAllTime(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "time")] HttpRequest req,
-            [Table("time", Connection = "AzureWebJobsStorage")] CloudTable timeTable,
+            [Table("TIME", Connection = "AzureWebJobsStorage")] CloudTable watchTable,
             ILogger log)
         {
-            log.LogInformation("Get all times received.");
+            log.LogInformation("Getting all the times.");
 
             TableQuery<TimeEntity> query = new TableQuery<TimeEntity>();
-            TableQuerySegment<TimeEntity> times = await timeTable.ExecuteQuerySegmentedAsync(query, null);
+            TableQuerySegment<TimeEntity> watches = await watchTable.ExecuteQuerySegmentedAsync(query, null);
 
-            string message = "Retrieved all times.";
+            string message = "Retrieving all the times";
             log.LogInformation(message);
 
             return new OkObjectResult(new Response
             {
                 IsSuccess = true,
                 Message = message,
-                Result = times
+                Result = watches
             });
         }
+
         ///******************************/
         ///************GETBYID************/
         ///******************************/
